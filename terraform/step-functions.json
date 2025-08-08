@@ -1,0 +1,130 @@
+{
+  "Comment": "Serverless workflow orchestrating 3 Lambda functions",
+  "StartAt": "Lambda1",
+  "States": {
+    "Lambda1": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${lambda1_function_arn}",
+        "Payload.$": "$"
+      },
+      "ResultPath": "$.lambda1_result",
+      "Next": "Lambda2",
+      "Retry": [
+        {
+          "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException"],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 3,
+          "BackoffRate": 2.0
+        },
+        {
+          "ErrorEquals": ["States.TaskFailed"],
+          "IntervalSeconds": 5,
+          "MaxAttempts": 2,
+          "BackoffRate": 2.0
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "Next": "HandleError",
+          "ResultPath": "$.error_info"
+        }
+      ]
+    },
+    "Lambda2": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${lambda2_function_arn}",
+        "Payload": {
+          "data.$": "$.lambda1_result.Payload.data",
+          "original_input.$": "$"
+        }
+      },
+      "ResultPath": "$.lambda2_result",
+      "Next": "Lambda3",
+      "Retry": [
+        {
+          "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException"],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 3,
+          "BackoffRate": 2.0
+        },
+        {
+          "ErrorEquals": ["States.TaskFailed"],
+          "IntervalSeconds": 5,
+          "MaxAttempts": 2,
+          "BackoffRate": 2.0
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "Next": "HandleError",
+          "ResultPath": "$.error_info"
+        }
+      ]
+    },
+    "Lambda3": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "${lambda3_function_arn}",
+        "Payload": {
+          "data.$": "$.lambda2_result.Payload.data",
+          "original_input.$": "$"
+        }
+      },
+      "ResultPath": "$.lambda3_result",
+      "Next": "Success",
+      "Retry": [
+        {
+          "ErrorEquals": ["Lambda.ServiceException", "Lambda.AWSLambdaException", "Lambda.SdkClientException"],
+          "IntervalSeconds": 2,
+          "MaxAttempts": 3,
+          "BackoffRate": 2.0
+        },
+        {
+          "ErrorEquals": ["States.TaskFailed"],
+          "IntervalSeconds": 5,
+          "MaxAttempts": 2,
+          "BackoffRate": 2.0
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": ["States.ALL"],
+          "Next": "HandleError",
+          "ResultPath": "$.error_info"
+        }
+      ]
+    },
+    "Success": {
+      "Type": "Pass",
+      "Result": {
+        "status": "SUCCESS",
+        "message": "Workflow completed successfully"
+      },
+      "ResultPath": "$.workflow_status",
+      "OutputPath": "$",
+      "End": true
+    },
+    "HandleError": {
+      "Type": "Pass",
+      "Parameters": {
+        "status": "FAILED",
+        "error.$": "$.error_info",
+        "timestamp.$": "$$.State.EnteredTime",
+        "execution_arn.$": "$$.Execution.Name"
+      },
+      "Next": "FailState"
+    },
+    "FailState": {
+      "Type": "Fail",
+      "Cause": "Workflow failed due to Lambda function error",
+      "Error": "WorkflowExecutionError"
+    }
+  }
+}

@@ -1,0 +1,102 @@
+# Claude Code Prompt: Serverless Step Functions with Docker + GitHub Actions
+
+Create a complete AWS serverless application with the following specifications:
+
+## Project Requirements
+
+**Architecture:**
+- 3 AWS Lambda functions orchestrated by AWS Step Functions
+- EventBridge trigger to start the Step Functions workflow
+- Docker container images for Lambda deployment (not ZIP files)
+- GitHub Actions for CI/CD deployment
+- AWS Secrets Manager for sensitive configuration
+- Terraform for infrastructure as code
+
+**Lambda Functions:**
+- Lambda 1: Print "Hello" and pass data to next lambda
+- Lambda 2: Print "World" and pass data to next lambda  
+- Lambda 3: Print ":)" and return final result
+- All lambdas should use external packages: `openai` and `google-api-python-client`
+- Lambdas use uv as package manager
+
+**Configuration Management:**
+- Use AWS Secrets Manager for API keys (OPENAI_API_KEY, GOOGLE_DRIVE_FOLDER_ID)
+- Use Lambda environment variables for non-sensitive config
+- Support local development with .env files and python-dotenv
+- Hybrid approach: load .env locally, use AWS Secrets Manager in production
+
+**Repository Structure:**
+```
+my-serverless-app/
+├── .github/workflows/
+│   └── deploy.yml
+├── src/
+│   ├── lambda1/
+│   ├── lambda2/
+│   └── lambda3/
+├── terraform/
+├── scripts/
+├── .env.example
+├── .gitignore
+├── README.md
+└── requirements-dev.txt
+```
+
+## Specific Implementation Details
+
+**Docker Images:**
+- Each lambda should have its own Dockerfile using `public.ecr.aws/lambda/python:3.12`
+- Include requirements.txt with openai and google-api-python-client packages
+- Optimize for Lambda container image best practices
+
+**Terraform Infrastructure:**
+- ECR repositories for each lambda image
+- Lambda functions using container images
+- Step Functions state machine with proper error handling and retries
+- EventBridge rule to trigger Step Functions (can be schedule-based for demo)
+- AWS Secrets Manager secret with sample keys
+- All necessary IAM roles and policies with least privilege
+- Output important ARNs and URLs
+
+**GitHub Actions Workflow:**
+- Trigger on push to main branch
+- Build and push Docker images to ECR
+- Deploy infrastructure with Terraform
+- Include proper AWS credentials configuration
+- Add workflow for both staging and production environments
+
+**Security & Best Practices:**
+- Never commit secrets to repository
+- Use AWS IAM least privilege principles
+- Include error handling and retries in Step Functions
+- Add CloudWatch logging configuration
+- Include X-Ray tracing for debugging
+
+**Local Development:**
+- Instructions for running locally with LocalStack or AWS SAM
+- Scripts for easy local testing
+- Clear setup instructions in README
+
+**Python Code Requirements:**
+- Each lambda handler should demonstrate reading from AWS Secrets Manager
+- Include proper error handling and logging
+- Pass data between lambdas through Step Functions input/output
+- Use boto3 for AWS services interaction
+
+## Deliverables
+
+Generate all necessary files including:
+1. Complete Terraform configuration with all resources
+2. Dockerfile for each lambda function
+3. Python handler code for all 3 lambdas
+4. GitHub Actions workflow file
+5. Step Functions state machine definition
+6. Development scripts and utilities
+7. Comprehensive README with setup instructions
+8. .env.example template
+9. .gitignore with appropriate exclusions
+10. requirements.txt files for each lambda
+
+assume I have aws cli and terraform programs installed in system.
+
+Make sure the solution is production-ready with proper error handling, security, and monitoring capabilities.

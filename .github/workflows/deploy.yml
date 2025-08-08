@@ -1,0 +1,190 @@
+name: Deploy Serverless Application
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+
+env:
+  AWS_REGION: us-east-1
+  APP_NAME: my-serverless-app
+
+jobs:
+  deploy:
+    name: Deploy to ${{ matrix.environment }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - environment: staging
+            branch: develop
+          - environment: production
+            branch: main
+    
+    # Only run for the matching branch
+    if: github.ref == format('refs/heads/{0}', matrix.branch)
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ env.AWS_REGION }}
+
+    - name: Login to Amazon ECR
+      id: login-ecr
+      uses: aws-actions/amazon-ecr-login@v2
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Build and push Lambda 1 image
+      uses: docker/build-push-action@v5
+      with:
+        context: ./src/lambda1
+        push: true
+        tags: |
+          ${{ steps.login-ecr.outputs.registry }}/${{ env.APP_NAME }}-lambda1:${{ github.sha }}
+          ${{ steps.login-ecr.outputs.registry }}/${{ env.APP_NAME }}-lambda1:latest
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+    - name: Build and push Lambda 2 image
+      uses: docker/build-push-action@v5
+      with:
+        context: ./src/lambda2
+        push: true
+        tags: |
+          ${{ steps.login-ecr.outputs.registry }}/${{ env.APP_NAME }}-lambda2:${{ github.sha }}
+          ${{ steps.login-ecr.outputs.registry }}/${{ env.APP_NAME }}-lambda2:latest
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+    - name: Build and push Lambda 3 image
+      uses: docker/build-push-action@v5
+      with:
+        context: ./src/lambda3
+        push: true
+        tags: |
+          ${{ steps.login-ecr.outputs.registry }}/${{ env.APP_NAME }}-lambda3:${{ github.sha }}
+          ${{ steps.login-ecr.outputs.registry }}/${{ env.APP_NAME }}-lambda3:latest
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: ~1.0
+        terraform_wrapper: false
+
+    - name: Terraform Format Check
+      run: terraform fmt -check -recursive
+      working-directory: terraform
+
+    - name: Terraform Init
+      run: |
+        terraform init \
+          -backend-config="bucket=${{ secrets.TERRAFORM_STATE_BUCKET }}" \
+          -backend-config="key=${{ matrix.environment }}/terraform.tfstate" \
+          -backend-config="region=${{ env.AWS_REGION }}"
+      working-directory: terraform
+
+    - name: Terraform Validate
+      run: terraform validate
+      working-directory: terraform
+
+    - name: Terraform Plan
+      run: |
+        terraform plan \
+          -var="environment=${{ matrix.environment }}" \
+          -var="image_tag=${{ github.sha }}" \
+          -var="openai_api_key=${{ secrets.OPENAI_API_KEY }}" \
+          -var="google_drive_folder_id=${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}" \
+          -var="eventbridge_enabled=${{ matrix.environment == 'production' }}" \
+          -out=tfplan
+      working-directory: terraform
+
+    - name: Terraform Apply
+      if: github.event_name == 'push'
+      run: terraform apply -auto-approve tfplan
+      working-directory: terraform
+
+    - name: Get Terraform Outputs
+      if: github.event_name == 'push'
+      id: terraform-outputs
+      run: |
+        echo "state_machine_arn=$(terraform output -raw step_functions_state_machine_arn)" >> $GITHUB_OUTPUT
+        echo "lambda1_arn=$(terraform output -json lambda_function_arns | jq -r '.lambda1')" >> $GITHUB_OUTPUT
+        echo "lambda2_arn=$(terraform output -json lambda_function_arns | jq -r '.lambda2')" >> $GITHUB_OUTPUT
+        echo "lambda3_arn=$(terraform output -json lambda_function_arns | jq -r '.lambda3')" >> $GITHUB_OUTPUT
+      working-directory: terraform
+
+    - name: Test Lambda Functions
+      if: github.event_name == 'push'
+      run: |
+        # Test Lambda 1
+        aws lambda invoke \
+          --function-name "$(echo '${{ steps.terraform-outputs.outputs.lambda1_arn }}' | sed 's/.*function:\([^:]*\).*/\1/')" \
+          --payload '{"test": true}' \
+          --cli-binary-format raw-in-base64-out \
+          lambda1_response.json
+        
+        # Test Lambda 2
+        aws lambda invoke \
+          --function-name "$(echo '${{ steps.terraform-outputs.outputs.lambda2_arn }}' | sed 's/.*function:\([^:]*\).*/\1/')" \
+          --payload '{"data": {"message": "Hello"}, "test": true}' \
+          --cli-binary-format raw-in-base64-out \
+          lambda2_response.json
+        
+        # Test Lambda 3
+        aws lambda invoke \
+          --function-name "$(echo '${{ steps.terraform-outputs.outputs.lambda3_arn }}' | sed 's/.*function:\([^:]*\).*/\1/')" \
+          --payload '{"data": {"combined_message": "Hello World"}, "test": true}' \
+          --cli-binary-format raw-in-base64-out \
+          lambda3_response.json
+        
+        echo "Lambda function tests completed"
+        cat lambda1_response.json
+        cat lambda2_response.json
+        cat lambda3_response.json
+
+    - name: Test Step Functions Workflow
+      if: github.event_name == 'push'
+      run: |
+        # Start execution
+        execution_arn=$(aws stepfunctions start-execution \
+          --state-machine-arn "${{ steps.terraform-outputs.outputs.state_machine_arn }}" \
+          --name "test-execution-$(date +%s)" \
+          --input '{"test": true, "trigger_source": "github-actions"}' \
+          --query 'executionArn' \
+          --output text)
+        
+        echo "Started Step Functions execution: $execution_arn"
+        
+        # Wait for execution to complete (timeout after 5 minutes)
+        timeout 300 bash -c 'while [[ "$(aws stepfunctions describe-execution --execution-arn "'$execution_arn'" --query status --output text)" == "RUNNING" ]]; do echo "Waiting for execution to complete..."; sleep 10; done'
+        
+        # Get execution result
+        aws stepfunctions describe-execution --execution-arn "$execution_arn" --query 'status' --output text
+        aws stepfunctions get-execution-history --execution-arn "$execution_arn" --query 'events[-1].executionSucceededEventDetails.output' --output text
+
+    - name: Deployment Summary
+      if: github.event_name == 'push'
+      run: |
+        echo "## Deployment Summary" >> $GITHUB_STEP_SUMMARY
+        echo "- **Environment**: ${{ matrix.environment }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Region**: ${{ env.AWS_REGION }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Image Tag**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Step Functions ARN**: ${{ steps.terraform-outputs.outputs.state_machine_arn }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Lambda Functions**:" >> $GITHUB_STEP_SUMMARY
+        echo "  - Lambda1: ${{ steps.terraform-outputs.outputs.lambda1_arn }}" >> $GITHUB_STEP_SUMMARY
+        echo "  - Lambda2: ${{ steps.terraform-outputs.outputs.lambda2_arn }}" >> $GITHUB_STEP_SUMMARY
+        echo "  - Lambda3: ${{ steps.terraform-outputs.outputs.lambda3_arn }}" >> $GITHUB_STEP_SUMMARY
