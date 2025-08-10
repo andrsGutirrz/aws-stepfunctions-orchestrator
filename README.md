@@ -5,7 +5,7 @@ A production-ready serverless application that demonstrates AWS Lambda functions
 ## 🎯 Overview
 
 This application consists of:
-- **3 Lambda Functions** (using Docker containers, not ZIP files)
+- **3 Lambda Functions** (deployed as ZIP files)
   - Lambda 1: Prints "Hello" and passes data to the next lambda
   - Lambda 2: Prints "World" and passes data to the next lambda
   - Lambda 3: Prints ":)" and returns the final result "Hello World :)"
@@ -35,7 +35,6 @@ my-serverless-app/
 ├── src/
 │   ├── lambda1/
 │   │   ├── handler.py          # Lambda 1 code
-│   │   ├── Dockerfile          # Lambda 1 container
 │   │   └── requirements.txt    # Lambda 1 dependencies
 │   ├── lambda2/            # Same structure as lambda1
 │   └── lambda3/            # Same structure as lambda1
@@ -57,7 +56,6 @@ my-serverless-app/
 ├── .env.example            # Environment variables template
 ├── .gitignore              # Git ignore file
 ├── README.md               # This file
-└── requirements-dev.txt    # Development dependencies
 ```
 
 ## 🚀 Quick Start
@@ -80,10 +78,10 @@ my-serverless-app/
    sudo apt update && sudo apt install terraform
    ```
 
-3. **Docker** for local testing and image building
+3. **Python 3.9+** for Lambda function development
    ```bash
-   # Verify Docker is running
-   docker --version
+   # Verify Python version
+   python --version
    ```
 
 4. **jq** for JSON processing (recommended)
@@ -109,35 +107,19 @@ my-serverless-app/
    vim .env
    ```
 
-2. **Install development dependencies** (optional)
-   ```bash
-   pip install -r requirements-dev.txt
-   ```
-
-3. **Test locally with Docker**
+2. **Test locally**
    ```bash
    # Test individual Lambda functions
-   ./scripts/local-test.sh lambda1
-   ./scripts/local-test.sh lambda2
-   ./scripts/local-test.sh lambda3
-   
-   # Test complete workflow simulation
-   ./scripts/local-test.sh workflow
-   
-   # Interactive testing
-   ./scripts/local-test.sh all
+   cd src/lambda1 && python handler.py
+   cd src/lambda2 && python handler.py
+   cd src/lambda3 && python handler.py
    ```
 
 ### AWS Deployment
 
-1. **Build and push Docker images to ECR**
+1. **Deploy infrastructure with Terraform**
    ```bash
-   ./scripts/build-and-push.sh development latest
-   ```
-
-2. **Deploy infrastructure with Terraform**
-   ```bash
-   ./scripts/deploy.sh development latest
+   ./scripts/deploy.sh development
    ```
 
 3. **Test the deployed workflow**
@@ -215,11 +197,10 @@ Add these secrets to your GitHub repository:
 
 The GitHub Actions workflow automatically:
 
-1. **Builds and pushes** Docker images to ECR
-2. **Runs Terraform** to deploy/update infrastructure
-3. **Tests** the deployed Lambda functions
-4. **Tests** the complete Step Functions workflow
-5. **Reports** deployment status
+1. **Runs Terraform** to deploy/update infrastructure
+2. **Tests** the deployed Lambda functions
+3. **Tests** the complete Step Functions workflow
+4. **Reports** deployment status
 
 Workflow triggers:
 - **Push to `main`** → Deploy to production
@@ -231,14 +212,10 @@ Workflow triggers:
 ### Local Testing
 
 ```bash
-# Test individual Lambdas with custom data
-./scripts/local-test.sh lambda1 '{"custom": "data"}'
-
-# Test complete workflow
-./scripts/local-test.sh workflow
-
-# Interactive testing menu
-./scripts/local-test.sh all
+# Test individual Lambda functions locally
+cd src/lambda1 && python -c "import handler; print(handler.lambda_handler({}, {}))"
+cd src/lambda2 && python -c "import handler; print(handler.lambda_handler({}, {}))"
+cd src/lambda3 && python -c "import handler; print(handler.lambda_handler({}, {}))"
 ```
 
 ### AWS Testing
@@ -261,16 +238,7 @@ aws events put-events \
 ### Unit Testing (Development)
 
 ```bash
-# Install test dependencies
-pip install -r requirements-dev.txt
 
-# Run tests
-pytest tests/ -v --cov=src/
-
-# Code formatting
-black src/
-isort src/
-flake8 src/
 ```
 
 ## 📊 Monitoring and Observability
@@ -280,23 +248,6 @@ flake8 src/
 - **Lambda Logs**: `/aws/lambda/my-serverless-app-lambda[1|2|3]`
 - **Step Functions Logs**: `/aws/stepfunctions/my-serverless-app-workflow`
 
-### X-Ray Tracing
-
-Enabled for all components to trace request flow:
-
-1. Go to **AWS X-Ray Console**
-2. View **Service Map** for visual representation
-3. Analyze **Traces** for performance insights
-
-### Monitoring Script
-
-```bash
-# Real-time log monitoring
-./scripts/monitor-logs.sh development all
-
-# Recent logs from all components
-./scripts/monitor-logs.sh development recent
-```
 
 ## 🔒 Security
 
@@ -317,32 +268,24 @@ All IAM roles follow the **principle of least privilege**:
 ### Security Best Practices
 
 - ✅ No secrets in code or version control
-- ✅ ECR image scanning enabled
+- ✅ ZIP file deployment with integrity checks
 - ✅ CloudWatch logging for audit trails
-- ✅ X-Ray tracing for request monitoring
 - ✅ Least privilege IAM policies
 
 ## 🚫 Troubleshooting
 
 ### Common Issues
 
-1. **Docker build fails**
+1. **Lambda deployment fails**
    ```bash
-   # Clear Docker cache
-   docker system prune -f
+   # Check function package size
+   cd src/lambda1 && zip -r lambda.zip . && ls -lh lambda.zip
    
-   # Rebuild without cache
-   docker build --no-cache -t test-image src/lambda1/
+   # Verify dependencies
+   pip install -r requirements.txt
    ```
 
-2. **ECR push permission denied**
-   ```bash
-   # Re-authenticate with ECR
-   aws ecr get-login-password --region us-east-1 | \
-   docker login --username AWS --password-stdin <account-id>.dkr.ecr.us-east-1.amazonaws.com
-   ```
-
-3. **Lambda function not found**
+2. **Lambda function not found**
    ```bash
    # Check if function exists
    aws lambda list-functions --query "Functions[?starts_with(FunctionName, 'my-serverless-app')]"
@@ -382,39 +325,9 @@ LOG_LEVEL = "DEBUG"
 
 | Script | Purpose | Usage |
 |--------|---------|-------|
-| `build-and-push.sh` | Build and push Docker images to ECR | `./scripts/build-and-push.sh [env] [tag]` |
-| `deploy.sh` | Deploy infrastructure with Terraform | `./scripts/deploy.sh [env] [tag]` |
+| `deploy.sh` | Deploy infrastructure with Terraform | `./scripts/deploy.sh [env]` |
 | `test-workflow.sh` | Test Step Functions workflow | `./scripts/test-workflow.sh [env]` |
 | `monitor-logs.sh` | Monitor CloudWatch logs | `./scripts/monitor-logs.sh [env] [component]` |
-| `local-test.sh` | Local testing with Docker | `./scripts/local-test.sh [lambda\|workflow\|all]` |
-
-## 📡 Production Deployment
-
-For production deployment:
-
-1. **Create production branch**
-   ```bash
-   git checkout -b main
-   git push origin main
-   ```
-
-2. **Setup production secrets in GitHub**
-   - Use production AWS credentials
-   - Use production API keys
-   - Configure Terraform remote backend
-
-3. **Enable EventBridge scheduling**
-   ```hcl
-   # In terraform/terraform.tfvars
-   eventbridge_enabled = true
-   eventbridge_schedule = "rate(60 minutes)"  # Adjust as needed
-   ```
-
-4. **Monitor deployment**
-   - Check GitHub Actions workflow
-   - Verify AWS resources in console
-   - Test workflow execution
-   - Monitor CloudWatch metrics
 
 ## 📚 Additional Resources
 
@@ -423,15 +336,6 @@ For production deployment:
 - [Terraform AWS Provider](https://registry.terraform.io/providers/hashicorp/aws/latest/docs)
 - [GitHub Actions for AWS](https://github.com/aws-actions)
 - [AWS Secrets Manager](https://docs.aws.amazon.com/secretsmanager/)
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch: `git checkout -b feature-name`
-3. Make changes and test locally
-4. Commit changes: `git commit -am 'Add feature'`
-5. Push to branch: `git push origin feature-name`
-6. Create a Pull Request
 
 ## 📝 License
 
@@ -464,5 +368,3 @@ Usage by model:
 ```
 
 ---
-
-🎉 **Happy Serverless Computing!** 🚀

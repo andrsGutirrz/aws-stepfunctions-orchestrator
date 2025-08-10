@@ -1,4 +1,4 @@
-# Claude Code Prompt: Serverless Step Functions with Docker + GitHub Actions
+# Claude Code Prompt: Serverless Step Functions + GitHub Actions
 
 Create a complete AWS serverless application with the following specifications:
 
@@ -7,7 +7,7 @@ Create a complete AWS serverless application with the following specifications:
 **Architecture:**
 - 3 AWS Lambda functions orchestrated by AWS Step Functions
 - EventBridge trigger to start the Step Functions workflow
-- Docker container images for Lambda deployment (not ZIP files)
+- Standard ZIP file deployment for Lambda functions
 - GitHub Actions for CI/CD deployment
 - AWS Secrets Manager for sensitive configuration
 - Terraform for infrastructure as code
@@ -44,14 +44,13 @@ my-serverless-app/
 
 ## Specific Implementation Details
 
-**Docker Images:**
-- Each lambda should have its own Dockerfile using `public.ecr.aws/lambda/python:3.12`
+**Lambda Deployment:**
+- Each lambda should be packaged as ZIP files
 - Include requirements.txt with openai and google-api-python-client packages
-- Optimize for Lambda container image best practices
+- Optimize for Lambda ZIP deployment best practices
 
 **Terraform Infrastructure:**
-- ECR repositories for each lambda image
-- Lambda functions using container images
+- Lambda functions using ZIP file deployment
 - Step Functions state machine with proper error handling and retries
 - EventBridge rule to trigger Step Functions (can be schedule-based for demo)
 - AWS Secrets Manager secret with sample keys
@@ -60,7 +59,7 @@ my-serverless-app/
 
 **GitHub Actions Workflow:**
 - Trigger on push to main branch
-- Build and push Docker images to ECR
+- Package Lambda functions as ZIP files
 - Deploy infrastructure with Terraform
 - Include proper AWS credentials configuration
 - Add workflow for both staging and production environments
@@ -73,7 +72,7 @@ my-serverless-app/
 - Include X-Ray tracing for debugging
 
 **Local Development:**
-- Instructions for running locally with LocalStack or AWS SAM
+- Instructions for running locally with Python
 - Scripts for easy local testing
 - Clear setup instructions in README
 
@@ -87,8 +86,7 @@ my-serverless-app/
 
 Generate all necessary files including:
 1. Complete Terraform configuration with all resources
-2. Dockerfile for each lambda function
-3. Python handler code for all 3 lambdas
+2. Python handler code for all 3 lambdas
 4. GitHub Actions workflow file
 5. Step Functions state machine definition
 6. Development scripts and utilities

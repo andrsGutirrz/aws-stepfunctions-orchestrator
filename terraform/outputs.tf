@@ -1,13 +1,3 @@
-# ECR Repository URLs
-output "ecr_repository_urls" {
-  description = "ECR repository URLs for Lambda functions"
-  value = {
-    lambda1 = aws_ecr_repository.lambda1.repository_url
-    lambda2 = aws_ecr_repository.lambda2.repository_url
-    lambda3 = aws_ecr_repository.lambda3.repository_url
-  }
-}
-
 # Lambda Function ARNs
 output "lambda_function_arns" {
   description = "ARNs of the Lambda functions"

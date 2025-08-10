@@ -1,93 +1,145 @@
 #!/bin/bash
 
-# Deploy infrastructure using Terraform
-# Usage: ./scripts/deploy.sh [environment] [image_tag]
+# Deploy AWS Step Functions and Lambda functions
+# Usage: ./scripts/deploy.sh
 
 set -e
 
-# Configuration
-ENVIRONMENT=${1:-development}
-IMAGE_TAG=${2:-latest}
-APP_NAME=${APP_NAME:-my-serverless-app}
-AWS_REGION=${AWS_REGION:-us-east-1}
+# Configuration (change these if needed)
+APP_NAME="my-serverless-app"
+AWS_REGION="us-east-1"
+ENVIRONMENT="production"
 
-echo "Deploying infrastructure..."
-echo "Environment: $ENVIRONMENT"
-echo "Image Tag: $IMAGE_TAG"
+echo "🚀 Starting deployment..."
 echo "App Name: $APP_NAME"
 echo "AWS Region: $AWS_REGION"
+echo "Environment: $ENVIRONMENT"
 
-# Check if .env file exists for local development
-if [ -f ".env" ] && [ "$ENVIRONMENT" = "development" ]; then
-    echo "Loading environment variables from .env file..."
+# Load environment variables from .env if it exists
+if [ -f ".env" ]; then
+    echo "📄 Loading environment variables from .env file..."
     source .env
 fi
+
+# Check required environment variables
+if [ -z "$OPENAI_API_KEY" ]; then
+    echo "❌ Error: OPENAI_API_KEY environment variable is required"
+    echo "Please set it in your .env file or environment"
+    exit 1
+fi
+
+if [ -z "$GOOGLE_DRIVE_FOLDER_ID" ]; then
+    echo "❌ Error: GOOGLE_DRIVE_FOLDER_ID environment variable is required" 
+    echo "Please set it in your .env file or environment"
+    exit 1
+fi
+
+# Create dist directory for Lambda packages
+echo ""
+echo "📦 Building Lambda packages..."
+mkdir -p dist
+
+# Build Lambda 1 package
+echo "Building Lambda 1..."
+cd src/lambda1
+pip install -r requirements.txt -t ./package
+cp handler.py ./package/
+cd package
+zip -r ../../../dist/lambda1.zip .
+cd ../../..
+
+# Build Lambda 2 package  
+echo "Building Lambda 2..."
+cd src/lambda2
+pip install -r requirements.txt -t ./package
+cp handler.py ./package/
+cd package
+zip -r ../../../dist/lambda2.zip .
+cd ../../..
+
+# Build Lambda 3 package
+echo "Building Lambda 3..."
+cd src/lambda3
+pip install -r requirements.txt -t ./package
+cp handler.py ./package/
+cd package
+zip -r ../../../dist/lambda3.zip .
+cd ../../..
+
+echo "✅ Lambda packages built successfully"
 
 # Navigate to terraform directory
 cd terraform
 
-# Initialize Terraform
-echo "\n=== Terraform Init ==="
+# Initialize Terraform (no backend - uses local state)
+echo ""
+echo "🔧 Initializing Terraform..."
 terraform init
 
 # Validate Terraform configuration
-echo "\n=== Terraform Validate ==="
+echo ""
+echo "✅ Validating Terraform configuration..."
 terraform validate
 
-# Format check
-echo "\n=== Terraform Format Check ==="
-terraform fmt -check -diff
+# Format Terraform files
+echo ""
+echo "🎨 Formatting Terraform files..."
+terraform fmt
 
 # Plan deployment
-echo "\n=== Terraform Plan ==="
+echo ""
+echo "📋 Creating deployment plan..."
 terraform plan \
     -var="environment=$ENVIRONMENT" \
-    -var="image_tag=$IMAGE_TAG" \
-    -var="app_name=$APP_NAME" \
-    -var="aws_region=$AWS_REGION" \
-    -var="openai_api_key=${OPENAI_API_KEY:-sk-placeholder-key}" \
-    -var="google_drive_folder_id=${GOOGLE_DRIVE_FOLDER_ID:-placeholder-folder-id}" \
-    -var="eventbridge_enabled=${EVENTBRIDGE_ENABLED:-false}" \
+    -var="openai_api_key=$OPENAI_API_KEY" \
+    -var="google_drive_folder_id=$GOOGLE_DRIVE_FOLDER_ID" \
+    -var="eventbridge_enabled=true" \
     -out=tfplan
 
-# Ask for confirmation if not in CI/CD environment
-if [ -z "$CI" ] && [ -z "$GITHUB_ACTIONS" ]; then
-    echo "\n=== Deployment Confirmation ==="
-    read -p "Do you want to apply these changes? (y/N): " -n 1 -r
-    echo
-    if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-        echo "Deployment cancelled."
-        exit 0
-    fi
+# Ask for confirmation
+echo ""
+echo "🤔 Ready to deploy. This will create AWS resources that may incur costs."
+read -p "Do you want to proceed? (y/N): " -n 1 -r
+echo
+if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+    echo "❌ Deployment cancelled."
+    exit 0
 fi
 
 # Apply deployment
-echo "\n=== Terraform Apply ==="
+echo ""
+echo "🚀 Deploying infrastructure..."
 terraform apply -auto-approve tfplan
 
 # Show outputs
-echo "\n=== Deployment Outputs ==="
+echo ""
+echo "📊 Deployment outputs:"
 terraform output
 
-echo "\n🎉 Deployment completed successfully!"
-echo "\nNext steps:"
-echo "1. Test individual Lambda functions:"
-echo "   aws lambda invoke --function-name $APP_NAME-lambda1 --payload '{}' response.json"
-echo "2. Test the complete workflow:"
-echo "   ./scripts/test-workflow.sh $ENVIRONMENT"
-echo "3. Monitor logs:"
-echo "   ./scripts/monitor-logs.sh $ENVIRONMENT"
+echo ""
+echo "🎉 Deployment completed successfully!"
+echo ""
+echo "💡 What's deployed:"
+echo "   - 3 Lambda functions (lambda1, lambda2, lambda3)"
+echo "   - Step Functions state machine"
+echo "   - IAM roles and policies"
+echo "   - EventBridge rules (if enabled)"
+echo ""
+echo "🧪 To test your deployment:"
+echo "   1. Check AWS Console > Step Functions"
+echo "   2. Start a new execution with test input: {\"test\": true}"
+echo "   3. Monitor the execution in the console"
 
-# Save deployment info
-cat > ../deployment-info.json << EOF
+# Save deployment info for reference
+cd ..
+cat > deployment-info.json << EOF
 {
   "environment": "$ENVIRONMENT",
-  "image_tag": "$IMAGE_TAG",
-  "app_name": "$APP_NAME",
+  "app_name": "$APP_NAME", 
   "aws_region": "$AWS_REGION",
-  "deployed_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-  "terraform_outputs": $(terraform output -json)
+  "deployed_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 }
 EOF
 
-echo "Deployment information saved to deployment-info.json"
+echo ""
+echo "📝 Deployment info saved to deployment-info.json"

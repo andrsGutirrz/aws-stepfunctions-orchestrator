@@ -22,11 +22,6 @@ variable "environment" {
   }
 }
 
-variable "image_tag" {
-  description = "Docker image tag for Lambda functions"
-  type        = string
-  default     = "latest"
-}
 
 # EventBridge Variables
 variable "eventbridge_schedule" {

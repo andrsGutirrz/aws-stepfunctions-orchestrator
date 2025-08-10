@@ -77,8 +77,10 @@ resource "aws_cloudwatch_log_group" "lambda3_logs" {
 resource "aws_lambda_function" "lambda1" {
   function_name = "${local.app_name}-lambda1"
   role          = aws_iam_role.lambda_execution_role.arn
-  package_type  = "Image"
-  image_uri     = "${aws_ecr_repository.lambda1.repository_url}:${var.image_tag}"
+  package_type  = "Zip"
+  filename      = "../dist/lambda1.zip"
+  handler       = "handler.lambda_handler"
+  runtime       = "python3.12"
   timeout       = 30
   memory_size   = 256
 
@@ -104,8 +106,10 @@ resource "aws_lambda_function" "lambda1" {
 resource "aws_lambda_function" "lambda2" {
   function_name = "${local.app_name}-lambda2"
   role          = aws_iam_role.lambda_execution_role.arn
-  package_type  = "Image"
-  image_uri     = "${aws_ecr_repository.lambda2.repository_url}:${var.image_tag}"
+  package_type  = "Zip"
+  filename      = "../dist/lambda2.zip"
+  handler       = "handler.lambda_handler"
+  runtime       = "python3.12"
   timeout       = 30
   memory_size   = 256
 
@@ -131,8 +135,10 @@ resource "aws_lambda_function" "lambda2" {
 resource "aws_lambda_function" "lambda3" {
   function_name = "${local.app_name}-lambda3"
   role          = aws_iam_role.lambda_execution_role.arn
-  package_type  = "Image"
-  image_uri     = "${aws_ecr_repository.lambda3.repository_url}:${var.image_tag}"
+  package_type  = "Zip"
+  filename      = "../dist/lambda3.zip"
+  handler       = "handler.lambda_handler"
+  runtime       = "python3.12"
   timeout       = 30
   memory_size   = 256
 
