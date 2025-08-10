@@ -4,5 +4,7 @@
         "activityBar.background": "#0A323C",
         "titleBar.activeBackground": "#0E4654",
         "titleBar.activeForeground": "#F4FBFD"
-    }
+    },
+    "python.testing.unittestEnabled": false,
+    "python.testing.pytestEnabled": true
 }

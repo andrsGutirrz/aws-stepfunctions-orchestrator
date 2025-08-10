@@ -14,7 +14,7 @@ if os.getenv('LOCAL_DEVELOPMENT', 'false').lower() == 'true':
     load_dotenv()
 
 # Initialize AWS clients
-secrets_client = boto3.client('secretsmanager')
+secrets_client = boto3.client('secretsmanager', region_name=os.getenv('AWS_REGION', 'us-east-1'))
 
 def get_secret(secret_name: str) -> str:
     """
@@ -42,73 +42,42 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         
         # Get data from previous lambda
         previous_data = event.get('data', {})
-        combined_message = previous_data.get('combined_message', '')
+        previous_message = previous_data.get('message', '')
         
         # Demonstrate secret retrieval
-        openai_api_key = get_secret('OPENAI_API_KEY')
-        google_drive_folder_id = get_secret('GOOGLE_DRIVE_FOLDER_ID')
-        
+        openai_api_key = None # get_secret('OPENAI_API_KEY')
+        google_drive_folder_id = None # get_secret('GOOGLE_DRIVE_FOLDER_ID')
+
         # Log that we have the secrets (without revealing values)
         logger.info(f"OpenAI API Key retrieved: {'Yes' if openai_api_key else 'No'}")
         logger.info(f"Google Drive Folder ID retrieved: {'Yes' if google_drive_folder_id else 'No'}")
-        
         # Print smiley message
         message = ":)"
-        final_message = f"{combined_message} {message}" if combined_message else message
+        combined_message = f"{previous_message} {message}" if previous_message else message
         print(message)
         logger.info(f"Message: {message}")
-        logger.info(f"Final combined message: {final_message}")
+        logger.info(f"Combined message so far: {combined_message}")
         
-        # Collect execution history from all lambdas
-        execution_history = []
-        if 'previous_lambda_data' in previous_data:
-            prev_lambda_data = previous_data['previous_lambda_data']
-            execution_history.append({
-                "lambda": "lambda1",
-                "message": prev_lambda_data.get('message', ''),
-                "timestamp": prev_lambda_data.get('timestamp', ''),
-                "secrets_available": prev_lambda_data.get('secrets_available', {})
-            })
-        
-        execution_history.append({
-            "lambda": "lambda2",
-            "message": previous_data.get('message', ''),
-            "timestamp": previous_data.get('timestamp', ''),
-            "secrets_available": previous_data.get('secrets_available', {})
-        })
-        
-        execution_history.append({
-            "lambda": "lambda3",
+        # Prepare data to pass to next lambda
+        output_data = {
             "message": message,
+            "combined_message": combined_message,
             "timestamp": context.aws_request_id if hasattr(context, 'aws_request_id') else "local-dev",
+            "lambda_name": "lambda2",
+            "previous_lambda_data": previous_data,
+            "input_data": event,
             "secrets_available": {
                 "openai": bool(openai_api_key),
                 "google_drive": bool(google_drive_folder_id)
-            }
-        })
-        
-        # Prepare final result
-        final_result = {
-            "final_message": final_message,
-            "execution_summary": {
-                "total_lambdas": 3,
-                "execution_chain": ["lambda1", "lambda2", "lambda3"],
-                "messages": ["Hello", "World", ":)"],
-                "combined_result": final_message
             },
-            "execution_history": execution_history,
-            "lambda_name": "lambda3",
-            "workflow_completed": True,
-            "timestamp": context.aws_request_id if hasattr(context, 'aws_request_id') else "local-dev"
+            "next_lambda": "lambda3"
         }
         
-        logger.info("Lambda 3 completed successfully - Workflow finished")
-        logger.info(f"Final result: {final_message}")
-        
+        logger.info("Lambda 2 completed successfully")
         return {
             "statusCode": 200,
-            "body": json.dumps(final_result),
-            "data": final_result
+            "body": json.dumps(output_data),
+            "data": output_data
         }
         
     except Exception as e:

@@ -24,10 +24,10 @@ jobs:
 
     - name: Install dependencies
       run: |
-        cd src/tests
-        pip install -r requirements.txt
+        cd src
+        pip install -r requirements.shared.txt
 
     - name: Run tests
       run: |
-        cd src/tests
+        cd tests
         python -m pytest -v

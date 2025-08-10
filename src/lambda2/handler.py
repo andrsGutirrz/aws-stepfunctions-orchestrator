@@ -14,7 +14,7 @@ if os.getenv('LOCAL_DEVELOPMENT', 'false').lower() == 'true':
     load_dotenv()
 
 # Initialize AWS clients
-secrets_client = boto3.client('secretsmanager')
+secrets_client = boto3.client('secretsmanager', region_name=os.getenv('AWS_REGION', 'us-east-1'))
 
 def get_secret(secret_name: str) -> str:
     """
@@ -45,9 +45,9 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         previous_message = previous_data.get('message', '')
         
         # Demonstrate secret retrieval
-        openai_api_key = get_secret('OPENAI_API_KEY')
-        google_drive_folder_id = get_secret('GOOGLE_DRIVE_FOLDER_ID')
-        
+        openai_api_key = None # get_secret('OPENAI_API_KEY')
+        google_drive_folder_id = None # get_secret('GOOGLE_DRIVE_FOLDER_ID')
+
         # Log that we have the secrets (without revealing values)
         logger.info(f"OpenAI API Key retrieved: {'Yes' if openai_api_key else 'No'}")
         logger.info(f"Google Drive Folder ID retrieved: {'Yes' if google_drive_folder_id else 'No'}")
